@@ -91,6 +91,36 @@ struct Config {
   static void SetVerbosity(const std::unordered_map<std::string, std::vector<std::string>>& params);
   static std::unordered_map<std::string, std::string> Str2Map(const char* parameters);
 
+  bool IsEmbeddedFeature(int feature_idx) const {
+    return feature_idx == embedded_categorical_feature;
+  }
+
+  int GetCategoricalFeatureVecsDim() const {
+    return categorical_feature_vecs[0].size();
+  }
+
+  void SetCategoricalFeatureVecs(int feature_index, std::vector<std::vector<double>>&& embedded_feature_vecs) {
+    categorical_feature_vecs = embedded_feature_vecs;
+    embedded_categorical_feature = feature_index;
+  }
+
+  // TODO (Anahit) remove
+  const std::vector<std::vector<double>>* GetCategoricalFeatureVecs(int feature_index) const {
+    if (feature_index != embedded_categorical_feature) {
+      return nullptr;
+    }
+
+    return &categorical_feature_vecs;
+  }
+
+    const std::vector<double>* GetCategoricalFeatureVec(int feature_index, int cat) const {
+      if (feature_index != embedded_categorical_feature) {
+        return nullptr;
+      }
+
+      return &categorical_feature_vecs[cat];
+  }
+
   #ifndef __NVCC__
   #pragma region Parameters
 
@@ -1087,6 +1117,8 @@ struct Config {
   std::vector<std::vector<int>> interaction_constraints_vector;
   static const std::unordered_map<std::string, std::string>& ParameterTypes();
   static const std::string DumpAliases();
+  std::vector<std::vector<double>> categorical_feature_vecs;
+  int embedded_categorical_feature;
 
  private:
   void CheckParamConflict();

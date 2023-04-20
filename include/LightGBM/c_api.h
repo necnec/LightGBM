@@ -618,6 +618,11 @@ LIGHTGBM_C_EXPORT int LGBM_BoosterGetLinear(BoosterHandle handle, int* out);
  */
 LIGHTGBM_C_EXPORT int LGBM_BoosterCreate(const DatasetHandle train_data,
                                          const char* parameters,
+                                         const void* embedded_feature_vecs,
+                                         int vecs_type,
+                                         int32_t num_feature_values,
+                                         int32_t dim,
+                                         int32_t embedded_feature_index,
                                          BoosterHandle* out);
 
 /*!

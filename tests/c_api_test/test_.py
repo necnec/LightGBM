@@ -181,6 +181,7 @@ def test_booster():
     LIB.LGBM_BoosterCreate(
         train,
         c_str("app=binary metric=auc num_leaves=31 verbose=0"),
+        # TODO (Anahit)
         ctypes.byref(booster))
     LIB.LGBM_BoosterAddValidData(booster, test)
     is_finished = ctypes.c_int(0)

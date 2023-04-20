@@ -3,7 +3,6 @@
  * Licensed under the MIT License. See LICENSE file in the project root for license information.
  */
 
-
 #ifndef LIGHTGBM_BOOSTING_GOSS_HPP_
 #define LIGHTGBM_BOOSTING_GOSS_HPP_
 

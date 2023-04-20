@@ -1463,7 +1463,8 @@ class Dataset:
         categorical_feature: _LGBM_CategoricalFeatureConfiguration = 'auto',
         params: Optional[Dict[str, Any]] = None,
         free_raw_data: bool = True,
-        categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None
+        categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None,
+        categorical_feature_index_vecs: Optional[Dict[int, np.array]] = None
     ):
         """Initialize Dataset.
 
@@ -1781,6 +1782,9 @@ class Dataset:
         if reference is not None:
             self.pandas_categorical = reference.pandas_categorical
             categorical_feature = reference.categorical_feature
+
+        self.categorical_feature_index_vecs = {data.columns.get_loc(k): v for k, v in categorical_feature_vecs.items()}
+
         data, feature_name, categorical_feature, self.pandas_categorical = _data_from_pandas(data,
                                                                                              feature_name,
                                                                                              categorical_feature,
@@ -1838,7 +1842,7 @@ class Dataset:
         elif isinstance(data, scipy.sparse.csc_matrix):
             self.__init_from_csc(data, params_str, ref_dataset)
         elif isinstance(data, np.ndarray):
-            self.__init_from_np2d(data, params_str, ref_dataset, categorical_feature_vecs=categorical_feature_vecs)
+            self.__init_from_np2d(data, params_str, ref_dataset)
         elif isinstance(data, list) and len(data) > 0:
             if all(isinstance(x, np.ndarray) for x in data):
                 self.__init_from_list_np2d(data, params_str, ref_dataset)
@@ -1849,7 +1853,7 @@ class Dataset:
         elif isinstance(data, Sequence):
             self.__init_from_seqs([data], ref_dataset)
         elif isinstance(data, dt_DataTable):
-            self.__init_from_np2d(data.to_numpy(), params_str, ref_dataset, categorical_feature_vecs=self.categorical_feature_vecs)
+            self.__init_from_np2d(data.to_numpy(), params_str, ref_dataset)
         else:
             try:
                 csr = scipy.sparse.csr_matrix(data)
@@ -1959,8 +1963,7 @@ class Dataset:
         self,
         mat: np.ndarray,
         params_str: str,
-        ref_dataset: Optional[_DatasetHandle],
-        categorical_feature_vecs: Optional[Dict[str, np.array]] = None
+        ref_dataset: Optional[_DatasetHandle]
     ) -> "Dataset":
         """Initialize data from a 2-D numpy matrix."""
         if len(mat.shape) != 2:
@@ -1971,15 +1974,6 @@ class Dataset:
             data = np.array(mat.reshape(mat.size), dtype=mat.dtype, copy=False)
         else:  # change non-float data to float data, need to copy
             data = np.array(mat.reshape(mat.size), dtype=np.float32)
-
-        if categorical_feature_vecs is not None:
-            # one feature supported for now
-            assert len(categorical_feature_vecs) == 1
-            vecs = list(categorical_feature_vecs.values())[0]
-            vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
-            ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
-
-
         ptr_data, type_ptr_data, _ = _c_float_array(data)
         _safe_call(_LIB.LGBM_DatasetCreateFromMat(
             ptr_data,
@@ -1989,13 +1983,7 @@ class Dataset:
             ctypes.c_int(_C_API_IS_ROW_MAJOR),
             _c_str(params_str),
             ref_dataset,
-            ctypes.byref(self.handle),
-            # TODO prepare alternative LGBM_DatasetCreateFromMatWithVecs ?
-            # ptr_vecs,
-            # ctypes.c_int(type_ptr_vecs),
-            # ctypes.c_int32(vecs.shape[0]),
-            # ctypes.c_int32(vecs.shape[1]),
-            ))
+            ctypes.byref(self.handle)))
         return self
 
     def __init_from_list_np2d(
@@ -3096,10 +3084,33 @@ class Booster:
             params.update(train_set.get_params())
             params_str = _param_dict_to_str(params)
             self.handle = ctypes.c_void_p()
+
+            vecs = np.array([], dtype=np.float32)
+            ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs)
+            embedded_feature_index = 0
+
+            if train_set.categorical_feature_index_vecs is not None:
+                # one feature supported for now
+                assert len(train_set.categorical_feature_index_vecs) == 1
+                vecs = list(train_set.categorical_feature_index_vecs.values())[0]
+                embedded_feature_index = list(train_set.categorical_feature_index_vecs.keys())[0]
+                vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
+                ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
+
+                print('vecs: {}'.format(vecs))
+                print('vecs.shape[0] {}'.format(vecs.shape[0]))
+                print('vecs.shape[1] {}'.format(vecs.shape[1]))
+
             _safe_call(_LIB.LGBM_BoosterCreate(
                 train_set.handle,
                 _c_str(params_str),
-                ctypes.byref(self.handle)))
+                ptr_vecs,
+                ctypes.c_int(type_ptr_vecs),
+                ctypes.c_int32(vecs.shape[0]),
+                ctypes.c_int32(vecs.shape[1]),
+                ctypes.c_int32(embedded_feature_index),
+                ctypes.byref(self.handle),
+            ))
             # save reference to data
             self.train_set = train_set
             self.valid_sets: List[Dataset] = []

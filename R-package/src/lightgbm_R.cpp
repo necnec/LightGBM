@@ -479,7 +479,15 @@ SEXP LGBM_BoosterCreate_R(SEXP train_data,
   SEXP ret = PROTECT(R_MakeExternalPtr(nullptr, R_NilValue, R_NilValue));
   const char* parameters_ptr = CHAR(PROTECT(Rf_asChar(parameters)));
   BoosterHandle handle = nullptr;
-  CHECK_CALL(LGBM_BoosterCreate(R_ExternalPtrAddr(train_data), parameters_ptr, &handle));
+  CHECK_CALL(LGBM_BoosterCreate(
+          R_ExternalPtrAddr(train_data),
+          parameters_ptr,
+          nullptr, // embedded_feature_vecs
+          -1, // vecs_type
+          -1, // num_feature_values
+          -1, // dim
+          -1, // embedded_feature_index
+          &handle));
   R_SetExternalPtrAddr(ret, handle);
   R_RegisterCFinalizerEx(ret, _BoosterFinalizer, TRUE);
   UNPROTECT(2);
