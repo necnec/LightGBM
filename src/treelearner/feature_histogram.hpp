@@ -52,7 +52,7 @@ namespace {
     public:
         Loss(Eigen::MatrixXd x, Eigen::VectorXd g, Eigen::VectorXd h)
         : x_(x), g_(g), h_(h) {}
-        float operator()(const Eigen::VectorXd& w, Eigen::VectorXd& grad)
+        double operator()(const Eigen::VectorXd& w, Eigen::VectorXd& grad)
         {
           Eigen::VectorXd wx = x_ * w;
           auto GRAD = g_.sum();
@@ -60,7 +60,7 @@ namespace {
           auto s = sigmoid(wx);
           auto gs = g_.dot(s);
           auto hs = h_.dot(s);
-          auto ones = Eigen::VectorXd::Ones(g_.size());
+          auto ones = Eigen::VectorXd::Ones(s.size());
 //          loss = -(gs**2 / (1 + hs) + (GRAD-gs)**2 / (1 + HESS - hs))
           auto loss = -(pow(gs, 2) / (1 + hs) + pow(GRAD - gs, 2) / (1 + HESS - hs));
 
@@ -68,10 +68,11 @@ namespace {
 //                            gs * (2*(1 + hs)*g - gs*h) / (1 + hs)**2
 //                            - (GRAD - gs) * (2*(1 + HESS - hs)*g - (GRAD - gs)*h) / (1 + HESS - hs)**2
 //                    ) * s * (1-s)).dot(X)
-          grad = -((
-                  gs * (2 * (1 + hs) * g_ - gs * h_) / pow(1 + hs, 2)
+          grad = -(
+                  (gs * (2 * (1 + hs) * g_ - gs * h_) / pow(1 + hs, 2)
                   - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
-                          * s * (ones - s)) * x_;
+                          .dot(s) * (ones - s)).transpose() * x_;
+
           return loss;
         }
     };
@@ -372,7 +373,6 @@ class FeatureHistogram {
     std::vector<int> sorted_idx;
     double l2 = meta_->config->lambda_l2;
     bool is_embedded_feature = meta_->config->IsEmbeddedFeature(feature_index_);
-//    bool is_embedded_feature = false;
     // TODO (Anahit) remove after testing
     bool use_onehot = meta_->num_bin <= meta_->config->max_cat_to_onehot && !is_embedded_feature;
 //    bool use_onehot = meta_->num_bin <= meta_->config->max_cat_to_onehot;
