@@ -68,11 +68,13 @@ namespace {
 //                            gs * (2*(1 + hs)*g - gs*h) / (1 + hs)**2
 //                            - (GRAD - gs) * (2*(1 + HESS - hs)*g - (GRAD - gs)*h) / (1 + HESS - hs)**2
 //                    ) * s * (1-s)).dot(X)
-          grad = -(
+          auto R = -(
                   (gs * (2 * (1 + hs) * g_ - gs * h_) / pow(1 + hs, 2)
                   - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
-                          .dot(s) * (ones - s)).transpose() * x_;
+                          );
+          grad = R.cwiseProduct(s).cwiseProduct(ones - s).transpose() * x_;
 
+          std::cerr << "Loss: " << loss << " Grad: " << grad.norm() << std::endl;
           return loss;
         }
     };
@@ -513,7 +515,7 @@ class FeatureHistogram {
               meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
               best_left_count, num_data - best_left_count, parent_output);
 
-        } else {
+      } else {
         is_splittable_ = false;
         for (size_t out_i = 0; out_i < find_direction.size(); ++out_i) {
           auto dir = find_direction[out_i];
