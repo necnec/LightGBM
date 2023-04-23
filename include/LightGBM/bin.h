@@ -119,6 +119,10 @@ class BinMapper {
     }
   }
 
+  inline const std::vector<int>& GetBin2Categorical() const {
+    return bin_2_categorical_;
+  }
+
   /*!
   * \brief Maximum categorical value
   * \return Maximum categorical value for categorical features, 0 for numerical features  

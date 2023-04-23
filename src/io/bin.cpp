@@ -449,8 +449,9 @@ namespace LightGBM {
         // sort by counts in descending order
         Common::SortForPair<int, int>(&counts_int, &distinct_values_int, 0, true);
         // will ignore the categorical of small counts
-        int cut_cnt = static_cast<int>(
-            Common::RoundInt((total_sample_cnt - na_cnt) * 0.99f));
+//        int cut_cnt = static_cast<int>(
+//            Common::RoundInt((total_sample_cnt - na_cnt) * 0.99f));
+        int cut_cnt = total_sample_cnt;
         size_t cur_cat_idx = 0;  // index of current category.
         categorical_2_bin_.clear();
         bin_2_categorical_.clear();

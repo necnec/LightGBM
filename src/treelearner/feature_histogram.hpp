@@ -73,8 +73,6 @@ namespace {
                    - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
                    );
           grad = R.cwiseProduct(s).cwiseProduct(ones - s).transpose() * x_;
-
-          std::cerr << "Loss: " << loss << " Grad: " << grad.norm() << std::endl;
           return loss;
         }
     };
@@ -463,7 +461,7 @@ class FeatureHistogram {
         Eigen::MatrixXd x = Eigen::MatrixXd::Zero(sorted_idx.size(), dim);
 
         for (size_t i = 0; i < sorted_idx.size(); ++i) {
-          auto x_vec = meta_->config->GetCategoricalFeatureVec(feature_index_, sorted_idx[i]);
+          auto x_vec = meta_->config->GetCategoricalFeatureVec(feature_index_, bin_2_categorical_[sorted_idx[i]]);
           for (size_t j = 0; j < x_vec->size(); ++j) {
             x(i, j) = (*x_vec)[j];
           }
@@ -917,6 +915,10 @@ class FeatureHistogram {
     feature_index_ = index;
   }
 
+  void SetBin2Categorical(std::vector<int> bin_2_cat) {
+    bin_2_categorical_ = bin_2_cat;
+  }
+
  private:
   template <bool USE_MC, bool USE_L1, bool USE_MAX_OUTPUT, bool USE_SMOOTHING>
   static double GetSplitGains(double sum_left_gradients,
@@ -1228,6 +1230,8 @@ class FeatureHistogram {
   std::function<void(double, double, data_size_t, const FeatureConstraint*,
                      double, SplitInfo*)>
       find_best_threshold_fun_;
+
+  std::vector<int> bin_2_categorical_;
 };
 
 class HistogramPool {
@@ -1344,7 +1348,9 @@ class HistogramPool {
       OMP_LOOP_EX_BEGIN();
       pool_[i].reset(new FeatureHistogram[train_data->num_features()]);
       for (int feature_index = 0; feature_index < train_data->num_features(); ++feature_index) {
-        pool_[i][train_data->InnerFeatureIndex(feature_index)].SetFeatureIndex(feature_index);
+        auto inner_feature_idx = train_data->InnerFeatureIndex(feature_index);
+        pool_[i][inner_feature_idx].SetFeatureIndex(feature_index);
+        pool_[i][inner_feature_idx].SetBin2Categorical(train_data->FeatureBinMapper(inner_feature_idx)->GetBin2Categorical());
       }
       data_[i].resize(num_total_bin * 2);
       for (int j = 0; j < train_data->num_features(); ++j) {

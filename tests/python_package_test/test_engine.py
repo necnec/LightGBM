@@ -4066,16 +4066,25 @@ def test_categorical_embedding():
     # categories 'a' and 'aa' are close in vector space. 'a' presented well in dataset, 'aa' presented poorly
     X, y, vecs = gen_data()
     ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs})
-    bst = lgb.train({'objective': 'binary'}, ds)
+    # ds = lgb.Dataset(X, y)
+    bst = lgb.train({'objective': 'binary', 'cat_smooth': 0}, ds, num_boost_round=2)
+    # bst = lgb.train({}, ds)
 
-    X_a = (X[X['c1'] == 'a']).copy()
+    from matplotlib import pyplot as plt
+    lgb.plot_tree(bst, tree_index=0, dpi=300)
+    plt.savefig('../tree0.png')
+    lgb.plot_tree(bst, tree_index=1, dpi=300)
+    plt.savefig('../tree1.png')
+
+    X_a = X[X['c1'] == 'a']
     pred_a = bst.predict(X_a)
 
     X_a['c1'] = 'aa'
     X_a['c1'] = X_a['c1'].astype('category')
     pred_aa = bst.predict(X_a)
 
-    print(X.columns)
-    print(bst.feature_importance())
+    print('pred_a: {}'.format(pred_a))
+    print('pred_aa: {}'.format(pred_aa))
 
+    # assert False
     np.testing.assert_allclose(pred_a, pred_aa)
