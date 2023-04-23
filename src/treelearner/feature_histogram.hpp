@@ -70,8 +70,8 @@ namespace {
 //                    ) * s * (1-s)).dot(X)
           auto R = -(
                   (gs * (2 * (1 + hs) * g_ - gs * h_) / pow(1 + hs, 2)
-                  - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
-                          );
+                   - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
+                   );
           grad = R.cwiseProduct(s).cwiseProduct(ones - s).transpose() * x_;
 
           std::cerr << "Loss: " << loss << " Grad: " << grad.norm() << std::endl;
@@ -343,6 +343,9 @@ class FeatureHistogram {
                                          const FeatureConstraint* constraints,
                                          double parent_output,
                                          SplitInfo* output) {
+
+    printf("-------- FindBestThresholdCategoricalInner\n");
+
     is_splittable_ = false;
     output->default_left = false;
     double best_gain = kMinScore;
@@ -447,29 +450,6 @@ class FeatureHistogram {
       used_bin = static_cast<int>(sorted_idx.size());
 
       l2 += meta_->config->cat_l2;
-
-      auto ctr_fun = [this](double sum_grad, double sum_hess) {
-        return (sum_grad) / (sum_hess + meta_->config->cat_smooth);
-      };
-      std::stable_sort(
-          sorted_idx.begin(), sorted_idx.end(), [this, &ctr_fun](int i, int j) {
-            return ctr_fun(GET_GRAD(data_, i), GET_HESS(data_, i)) <
-                   ctr_fun(GET_GRAD(data_, j), GET_HESS(data_, j));
-          });
-
-      std::vector<int> find_direction(1, 1);
-      std::vector<int> start_position(1, 0);
-      find_direction.push_back(-1);
-      start_position.push_back(used_bin - 1);
-      const int max_num_cat =
-          std::min(meta_->config->max_cat_threshold, (used_bin + 1) / 2);
-      int max_threshold = std::max(std::min(max_num_cat, used_bin) - 1, 0);
-      if (USE_RAND) {
-        if (max_threshold > 0) {
-          rand_threshold = meta_->rand.NextInt(0, max_threshold);
-        }
-      }
-
       if (is_embedded_feature) {
         LBFGSpp::LBFGSParam<double> param;
         param.epsilon = 1e-6;
@@ -498,94 +478,133 @@ class FeatureHistogram {
 
         Eigen::VectorXd split = x * w;
 
+        std::vector<int> indices(split.size());
+        iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(),
+                  [&split](int left, int right) -> bool {
+          return split[left] < split[right];
+        });
 
-//        assert(split.size() == (long)sorted_idx.size());
-        for (long i = 0; i < split.size(); ++i) {
-            if (split[i] < 0) {
-              left_leaf_indices.push_back(sorted_idx[i]);
-              best_sum_left_gradient += g[i];
-              best_sum_left_hessian += h[i];
-              best_left_count += 1;
-            }
+        std::vector<int> sorted(sorted_idx.size());
+        for (size_t i = 0; i < indices.size(); i++) {
+          sorted[i] = sorted_idx[indices[i]];
         }
 
-        best_gain = GetSplitGains<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
-                best_sum_left_gradient, best_sum_left_hessian, sum_gradient - best_sum_left_gradient,
-              sum_gradient - best_sum_left_hessian, meta_->config->lambda_l1, l2,
-              meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
-              best_left_count, num_data - best_left_count, parent_output);
+        sorted_idx = sorted;
+
+        printf("split\n");
+        for (auto e: split) {
+          printf("%f ", e);
+        }
+        printf("\n");
+
+        printf("sorted_idx\n");
+        for (auto e: sorted_idx) {
+          printf("%d ", e);
+        }
+        printf("\n");
 
       } else {
-        is_splittable_ = false;
-        for (size_t out_i = 0; out_i < find_direction.size(); ++out_i) {
-          auto dir = find_direction[out_i];
-          auto start_pos = start_position[out_i];
-          data_size_t min_data_per_group = meta_->config->min_data_per_group;
-          data_size_t cnt_cur_group = 0;
-          double sum_left_gradient = 0.0f;
-          double sum_left_hessian = kEpsilon;
-          data_size_t left_count = 0;
-          for (int i = 0; i < used_bin && i < max_num_cat; ++i) {
-            auto t = sorted_idx[start_pos];
-            start_pos += dir;
-            const auto grad = GET_GRAD(data_, t);
-            const auto hess = GET_HESS(data_, t);
-            data_size_t cnt =
-                    static_cast<data_size_t>(Common::RoundInt(hess * cnt_factor));
+        auto ctr_fun = [this](double sum_grad, double sum_hess) {
+            return (sum_grad) / (sum_hess + meta_->config->cat_smooth);
+        };
+        std::stable_sort(
+                sorted_idx.begin(), sorted_idx.end(), [this, &ctr_fun](int i, int j) {
+                    return ctr_fun(GET_GRAD(data_, i), GET_HESS(data_, i)) <
+                           ctr_fun(GET_GRAD(data_, j), GET_HESS(data_, j));
+                });
+      }
 
-            sum_left_gradient += grad;
-            sum_left_hessian += hess;
-            left_count += cnt;
-            cnt_cur_group += cnt;
+      std::vector<int> find_direction(1, 1);
+      std::vector<int> start_position(1, 0);
+      find_direction.push_back(-1);
+      start_position.push_back(used_bin - 1);
+      const int max_num_cat =
+          std::min(meta_->config->max_cat_threshold, (used_bin + 1) / 2);
+      int max_threshold = std::max(std::min(max_num_cat, used_bin) - 1, 0);
+      if (USE_RAND) {
+        if (max_threshold > 0) {
+          rand_threshold = meta_->rand.NextInt(0, max_threshold);
+        }
+      }
 
-            if (left_count < meta_->config->min_data_in_leaf ||
-                sum_left_hessian < meta_->config->min_sum_hessian_in_leaf) {
+      is_splittable_ = false;
+      for (size_t out_i = 0; out_i < find_direction.size(); ++out_i) {
+        auto dir = find_direction[out_i];
+        auto start_pos = start_position[out_i];
+        data_size_t min_data_per_group = meta_->config->min_data_per_group;
+        data_size_t cnt_cur_group = 0;
+        double sum_left_gradient = 0.0f;
+        double sum_left_hessian = kEpsilon;
+        data_size_t left_count = 0;
+        for (int i = 0; i < used_bin && i < max_num_cat; ++i) {
+          auto t = sorted_idx[start_pos];
+          start_pos += dir;
+          const auto grad = GET_GRAD(data_, t);
+          const auto hess = GET_HESS(data_, t);
+          data_size_t cnt =
+                  static_cast<data_size_t>(Common::RoundInt(hess * cnt_factor));
+
+          sum_left_gradient += grad;
+          sum_left_hessian += hess;
+          left_count += cnt;
+          cnt_cur_group += cnt;
+
+          if (left_count < meta_->config->min_data_in_leaf ||
+              sum_left_hessian < meta_->config->min_sum_hessian_in_leaf) {
+            printf("Left leaf is small. Moving forward\n");
+            continue;
+          }
+          data_size_t right_count = num_data - left_count;
+          if (right_count < meta_->config->min_data_in_leaf ||
+              right_count < min_data_per_group) {
+            printf("Right leaf is small. Moving forward\n");
+            break;
+          }
+
+          double sum_right_hessian = sum_hessian - sum_left_hessian;
+          if (sum_right_hessian < meta_->config->min_sum_hessian_in_leaf) {
+            break;
+          }
+
+          if (cnt_cur_group < min_data_per_group) {
+            continue;
+          }
+
+          cnt_cur_group = 0;
+
+          double sum_right_gradient = sum_gradient - sum_left_gradient;
+          if (USE_RAND) {
+            if (i != rand_threshold) {
               continue;
             }
-            data_size_t right_count = num_data - left_count;
-            if (right_count < meta_->config->min_data_in_leaf ||
-                right_count < min_data_per_group) {
-              break;
-            }
+          }
+          double current_gain = GetSplitGains<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
+                  sum_left_gradient, sum_left_hessian, sum_right_gradient,
+                  sum_right_hessian, meta_->config->lambda_l1, l2,
+                  meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
+                  left_count, right_count, parent_output);
+          printf("threshold %d, gain: %f\n", i, current_gain);
 
-            double sum_right_hessian = sum_hessian - sum_left_hessian;
-            if (sum_right_hessian < meta_->config->min_sum_hessian_in_leaf) {
-              break;
-            }
-
-            if (cnt_cur_group < min_data_per_group) {
-              continue;
-            }
-
-            cnt_cur_group = 0;
-
-            double sum_right_gradient = sum_gradient - sum_left_gradient;
-            if (USE_RAND) {
-              if (i != rand_threshold) {
-                continue;
-              }
-            }
-            double current_gain = GetSplitGains<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
-                    sum_left_gradient, sum_left_hessian, sum_right_gradient,
-                    sum_right_hessian, meta_->config->lambda_l1, l2,
-                    meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
-                    left_count, right_count, parent_output);
-            if (current_gain <= min_gain_shift) {
-              continue;
-            }
-            is_splittable_ = true;
-            if (current_gain > best_gain) {
-              best_left_count = left_count;
-              best_sum_left_gradient = sum_left_gradient;
-              best_sum_left_hessian = sum_left_hessian;
-              best_threshold = i;
-              best_gain = current_gain;
-              best_dir = dir;
-            }
+          if (current_gain <= min_gain_shift) {
+            printf("gain too small\n");
+            continue;
+          }
+          is_splittable_ = true;
+          if (current_gain > best_gain) {
+            best_left_count = left_count;
+            best_sum_left_gradient = sum_left_gradient;
+            best_sum_left_hessian = sum_left_hessian;
+            best_threshold = i;
+            best_gain = current_gain;
+            best_dir = dir;
+            printf("current best_threshold: %d\n", best_threshold);
           }
         }
       }
     }
+    printf("best_threshold: %d\n", best_threshold);
+    printf("best_dir: %d\n", best_dir);
 
     if (is_splittable_) {
       output->left_output = CalculateSplittedLeafOutput<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
@@ -609,15 +628,6 @@ class FeatureHistogram {
         output->num_cat_threshold = 1;
         output->cat_threshold =
             std::vector<uint32_t>(1, static_cast<uint32_t>(best_threshold + offset));
-      }
-      else if (is_embedded_feature) {
-        output->num_cat_threshold = best_left_count;
-        output->cat_threshold =
-                std::vector<uint32_t>(output->num_cat_threshold);
-        for (auto i : left_leaf_indices) {
-          auto t = sorted_idx[i] + offset; // TODO (Anahit) is + offset needed ?
-          output->cat_threshold[i] = t;
-        }
       } else {
         output->num_cat_threshold = best_threshold + 1;
         output->cat_threshold =

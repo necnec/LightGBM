@@ -1524,6 +1524,7 @@ class Dataset:
         self.version = 0
         self._start_row = 0  # Used when pushing rows one by one.
         self.categorical_feature_vecs = categorical_feature_vecs
+        self.categorical_feature_index_vecs = categorical_feature_index_vecs
 
     def __del__(self) -> None:
         try:
@@ -1783,7 +1784,8 @@ class Dataset:
             self.pandas_categorical = reference.pandas_categorical
             categorical_feature = reference.categorical_feature
 
-        self.categorical_feature_index_vecs = {data.columns.get_loc(k): v for k, v in categorical_feature_vecs.items()}
+        if categorical_feature_vecs:
+            self.categorical_feature_index_vecs = {data.columns.get_loc(k): v for k, v in categorical_feature_vecs.items()}
 
         data, feature_name, categorical_feature, self.pandas_categorical = _data_from_pandas(data,
                                                                                              feature_name,
@@ -3085,9 +3087,10 @@ class Booster:
             params_str = _param_dict_to_str(params)
             self.handle = ctypes.c_void_p()
 
-            vecs = np.array([], dtype=np.float32)
-            ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs)
-            embedded_feature_index = 0
+            vecs = np.array([[0.0]], dtype=np.float32)
+            vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
+            ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
+            embedded_feature_index = -1
 
             if train_set.categorical_feature_index_vecs is not None:
                 # one feature supported for now
