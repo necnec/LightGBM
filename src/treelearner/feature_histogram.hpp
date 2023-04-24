@@ -592,7 +592,7 @@ class FeatureHistogram {
             continue;
           }
           is_splittable_ = true;
-          if (current_gain > best_gain) {
+          if (current_gain >= best_gain) {
             best_left_count = left_count;
             best_sum_left_gradient = sum_left_gradient;
             best_sum_left_hessian = sum_left_hessian;

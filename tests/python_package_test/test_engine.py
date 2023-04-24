@@ -4027,7 +4027,7 @@ def test_categorical_embedding():
         x2 = np.random.randn(N0)
         x3 = np.random.randn(N0)
 
-        K = ['a', 'b', 'c']
+        K = ['a', 'b', 'c', 'd']
         c1 = np.random.choice(K, N0)
 
         X = pd.DataFrame({
@@ -4037,7 +4037,7 @@ def test_categorical_embedding():
             'c1': c1,
         })
         X['c1'] = pd.Categorical(
-            X['c1'], categories=["a", "aa", "b", "c"], ordered=False
+            X['c1'], categories=["a", "aa", "b", "c", "d", "e"], ordered=False
         )
 
         def f(x):
@@ -4061,7 +4061,7 @@ def test_categorical_embedding():
         y = np.array(X.apply(f, axis=1))
 
         D = 30
-        vecs = np.random.randn(4, D)
+        vecs = np.random.randn(6, D)
 
         # introduce some noise as well later
         vecs[X.c1.cat.categories == 'aa'] = vecs[X.c1.cat.categories == 'a'] #+ 0.01 * np.random.randn(D)
@@ -4072,11 +4072,11 @@ def test_categorical_embedding():
     X, y, vecs = gen_data()
     ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs})
     # ds = lgb.Dataset(X, y)
-    bst = lgb.train({'objective': 'binary', 'cat_smooth': 0}, ds, num_boost_round=1)
+    bst = lgb.train({'objective': 'binary', 'cat_smooth': 0, 'num_leaves': 16}, ds, num_boost_round=1)
     # bst = lgb.train({}, ds)
 
     from matplotlib import pyplot as plt
-    lgb.plot_tree(bst, tree_index=0, dpi=300)
+    lgb.plot_tree(bst, tree_index=0, dpi=300, show_info=['split_gain', 'internal_value', 'internal_count'])
     plt.savefig('../tree0.png')
     # lgb.plot_tree(bst, tree_index=1, dpi=300)
     # plt.savefig('../tree1.png')
