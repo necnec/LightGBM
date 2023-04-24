@@ -1254,6 +1254,8 @@ int LGBM_DatasetCreateFromMat(const void* data,
                               int is_row_major,
                               const char* parameters,
                               const DatasetHandle reference,
+                              int32_t embedded_feature_index,
+                              int32_t embedded_feature_cat_count,
                               DatasetHandle* out) {
   return LGBM_DatasetCreateFromMats(1,
                                     &data,
@@ -1263,6 +1265,8 @@ int LGBM_DatasetCreateFromMat(const void* data,
                                     is_row_major,
                                     parameters,
                                     reference,
+                                    embedded_feature_index,
+                                    embedded_feature_cat_count,
                                     out);
 }
 
@@ -1274,11 +1278,15 @@ int LGBM_DatasetCreateFromMats(int32_t nmat,
                                int is_row_major,
                                const char* parameters,
                                const DatasetHandle reference,
+                               int32_t embedded_feature_index,
+                               int32_t embedded_feature_cat_count,
                                DatasetHandle* out) {
   API_BEGIN();
   auto param = Config::Str2Map(parameters);
   Config config;
   config.Set(param);
+  config.SetEmbeddedFeature(embedded_feature_index);
+  config.SetEmbeddedFeatureCatCount(embedded_feature_cat_count);
   OMP_SET_NUM_THREADS(config.num_threads);
   std::unique_ptr<Dataset> ret;
   int32_t total_nrow = 0;

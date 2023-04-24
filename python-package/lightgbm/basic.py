@@ -1977,6 +1977,11 @@ class Dataset:
         else:  # change non-float data to float data, need to copy
             data = np.array(mat.reshape(mat.size), dtype=np.float32)
         ptr_data, type_ptr_data, _ = _c_float_array(data)
+
+        embedded_feature_cat_count = len(list(self.categorical_feature_index_vecs.values())[0])\
+            if self.categorical_feature_index_vecs else 0
+        embedded_feature_index = list(self.categorical_feature_index_vecs.keys())[0] \
+            if self.categorical_feature_index_vecs else -1
         _safe_call(_LIB.LGBM_DatasetCreateFromMat(
             ptr_data,
             ctypes.c_int(type_ptr_data),
@@ -1985,6 +1990,8 @@ class Dataset:
             ctypes.c_int(_C_API_IS_ROW_MAJOR),
             _c_str(params_str),
             ref_dataset,
+            ctypes.c_int32(embedded_feature_index),
+            ctypes.c_int32(embedded_feature_cat_count),
             ctypes.byref(self.handle)))
         return self
 

@@ -139,6 +139,8 @@ def load_from_mat(filename, reference):
         ctypes.c_int(1),
         c_str('max_bin=15'),
         ref,
+        -1,  # embedded feature index
+        0,  # embedded feature category count
         ctypes.byref(handle))
     num_data = ctypes.c_int(0)
     LIB.LGBM_DatasetGetNumData(handle, ctypes.byref(num_data))

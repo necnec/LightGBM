@@ -179,7 +179,7 @@ class BinMapper {
   * \param forced_upper_bounds Vector of split points that must be used (if this has size less than max_bin, remaining splits are found by the algorithm)
   */
   void FindBin(double* values, int num_values, size_t total_sample_cnt, int max_bin, int min_data_in_bin, int min_split_data, bool pre_filter, BinType bin_type,
-               bool use_missing, bool zero_as_missing, const std::vector<double>& forced_upper_bounds);
+               bool use_missing, bool zero_as_missing, const std::vector<double>& forced_upper_bounds, bool is_embedded_feature, int embedded_feature_cat_count);
 
   /*!
   * \brief Serializing this object to buffer

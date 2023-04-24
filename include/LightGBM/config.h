@@ -91,6 +91,11 @@ struct Config {
   static void SetVerbosity(const std::unordered_map<std::string, std::vector<std::string>>& params);
   static std::unordered_map<std::string, std::string> Str2Map(const char* parameters);
 
+
+  void SetEmbeddedFeature(int feature_idx) {
+    embedded_categorical_feature = feature_idx;
+  }
+
   bool IsEmbeddedFeature(int feature_idx) const {
     return feature_idx == embedded_categorical_feature;
   }
@@ -101,7 +106,7 @@ struct Config {
 
   void SetCategoricalFeatureVecs(int feature_index, std::vector<std::vector<double>>&& embedded_feature_vecs) {
     categorical_feature_vecs = embedded_feature_vecs;
-    embedded_categorical_feature = feature_index;
+    SetEmbeddedFeature(feature_index);
   }
 
   // TODO (Anahit) remove
@@ -121,7 +126,15 @@ struct Config {
       return &categorical_feature_vecs[cat];
   }
 
-  #ifndef __NVCC__
+    void SetEmbeddedFeatureCatCount(int cat_count) {
+      embedded_categorical_feature_cat_count = cat_count;
+    }
+
+    int GetEmbeddedFeatureCatCount() const {
+      return embedded_categorical_feature_cat_count;
+    }
+
+#ifndef __NVCC__
   #pragma region Parameters
 
   #pragma region Core Parameters
@@ -1119,6 +1132,7 @@ struct Config {
   static const std::string DumpAliases();
   std::vector<std::vector<double>> categorical_feature_vecs;
   int embedded_categorical_feature;
+  int embedded_categorical_feature_cat_count;
 
  private:
   void CheckParamConflict();
