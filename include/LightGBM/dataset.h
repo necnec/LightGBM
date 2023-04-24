@@ -924,8 +924,6 @@ class Dataset {
 
   #endif  // USE_CUDA
 
-  std::vector<std::vector<double>> categorical_feature_vecs;
-  int embedded_categorical_feature;
  private:
   void SerializeHeader(BinaryWriter* serializer);
 
