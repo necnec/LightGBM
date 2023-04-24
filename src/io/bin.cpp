@@ -440,6 +440,7 @@ namespace LightGBM {
           }
         }
       }
+      // printf("COUNTS: total_sample_cnt=%d na_cnt=%d", total_sample_cnt, na_cnt);
       int rest_cnt = static_cast<int>(total_sample_cnt - na_cnt);
       if (rest_cnt > 0) {
         const int SPARSE_RATIO = 100;
