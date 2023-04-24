@@ -438,6 +438,9 @@ void Dataset::Construct(std::vector<std::unique_ptr<BinMapper>>* bin_mappers,
   }
   device_type_ = io_config.device_type;
   gpu_device_id_ = io_config.gpu_device_id;
+
+  embedded_categorical_feature = io_config.embedded_categorical_feature;
+  categorical_feature_vecs = io_config.categorical_feature_vecs;
 }
 
 void Dataset::FinishLoad() {

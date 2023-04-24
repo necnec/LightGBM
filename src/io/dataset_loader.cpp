@@ -645,12 +645,12 @@ Dataset* DatasetLoader::ConstructFromSampleData(double** sample_values,
         bin_mappers[i]->FindBin(sample_values[i], num_per_col[i], total_sample_size,
                                 config_.max_bin, config_.min_data_in_bin, filter_cnt, config_.feature_pre_filter,
                                 bin_type, config_.use_missing, config_.zero_as_missing,
-                                forced_bin_bounds[i]);
+                                forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       } else {
         bin_mappers[i]->FindBin(sample_values[i], num_per_col[i], total_sample_size,
                                 config_.max_bin_by_feature[i], config_.min_data_in_bin,
                                 filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing,
-                                config_.zero_as_missing, forced_bin_bounds[i]);
+                                config_.zero_as_missing, forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       }
       OMP_LOOP_EX_END();
     }
@@ -692,12 +692,12 @@ Dataset* DatasetLoader::ConstructFromSampleData(double** sample_values,
         bin_mappers[i]->FindBin(sample_values[start[rank] + i], num_per_col[start[rank] + i],
                                 total_sample_size, config_.max_bin, config_.min_data_in_bin,
                                 filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing, config_.zero_as_missing,
-                                forced_bin_bounds[i]);
+                                forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       } else {
         bin_mappers[i]->FindBin(sample_values[start[rank] + i], num_per_col[start[rank] + i],
                                 total_sample_size, config_.max_bin_by_feature[start[rank] + i],
                                 config_.min_data_in_bin, filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing,
-                                config_.zero_as_missing, forced_bin_bounds[i]);
+                                config_.zero_as_missing, forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       }
       OMP_LOOP_EX_END();
     }
@@ -1152,12 +1152,12 @@ void DatasetLoader::ConstructBinMappersFromTextData(int rank, int num_machines,
         bin_mappers[i]->FindBin(sample_values[i].data(), static_cast<int>(sample_values[i].size()),
                                 sample_data.size(), config_.max_bin, config_.min_data_in_bin,
                                 filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing, config_.zero_as_missing,
-                                forced_bin_bounds[i]);
+                                forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       } else {
         bin_mappers[i]->FindBin(sample_values[i].data(), static_cast<int>(sample_values[i].size()),
                                 sample_data.size(), config_.max_bin_by_feature[i],
                                 config_.min_data_in_bin, filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing,
-                                config_.zero_as_missing, forced_bin_bounds[i]);
+                                config_.zero_as_missing, forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       }
       OMP_LOOP_EX_END();
     }
@@ -1196,13 +1196,13 @@ void DatasetLoader::ConstructBinMappersFromTextData(int rank, int num_machines,
                                 static_cast<int>(sample_values[start[rank] + i].size()),
                                 sample_data.size(), config_.max_bin, config_.min_data_in_bin,
                                 filter_cnt, config_.feature_pre_filter, bin_type, config_.use_missing, config_.zero_as_missing,
-                                forced_bin_bounds[i]);
+                                forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       } else {
         bin_mappers[i]->FindBin(sample_values[start[rank] + i].data(),
                                 static_cast<int>(sample_values[start[rank] + i].size()),
                                 sample_data.size(), config_.max_bin_by_feature[i],
                                 config_.min_data_in_bin, filter_cnt, config_.feature_pre_filter, bin_type,
-                                config_.use_missing, config_.zero_as_missing, forced_bin_bounds[i]);
+                                config_.use_missing, config_.zero_as_missing, forced_bin_bounds[i], config_.GetCategoricalFeatureVecsCount(i));
       }
       OMP_LOOP_EX_END();
     }

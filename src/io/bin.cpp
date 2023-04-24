@@ -325,7 +325,7 @@ namespace LightGBM {
   void BinMapper::FindBin(double* values, int num_sample_values, size_t total_sample_cnt,
                           int max_bin, int min_data_in_bin, int min_split_data, bool pre_filter, BinType bin_type,
                           bool use_missing, bool zero_as_missing,
-                          const std::vector<double>& forced_upper_bounds) {
+                          const std::vector<double>& forced_upper_bounds, int categorical_feature_vecs_count) {
     int na_cnt = 0;
     int non_na_cnt = 0;
     for (int i = 0; i < num_sample_values; ++i) {
@@ -449,13 +449,21 @@ namespace LightGBM {
         // sort by counts in descending order
         Common::SortForPair<int, int>(&counts_int, &distinct_values_int, 0, true);
         // will ignore the categorical of small counts
-//        int cut_cnt = static_cast<int>(
-//            Common::RoundInt((total_sample_cnt - na_cnt) * 0.99f));
+        // int cut_cnt = static_cast<int>(
+        //     Common::RoundInt((total_sample_cnt - na_cnt) * 0.99f));
+        // TODO handle only for EMB CATEGORIES
         int cut_cnt = total_sample_cnt;
         size_t cur_cat_idx = 0;  // index of current category.
         categorical_2_bin_.clear();
         bin_2_categorical_.clear();
         int used_cnt = 0;
+
+
+        // printf("\ndistinct_values_int");
+        // for (int i = 0; i < distinct_values_int.size(); i++) {
+        //     printf(" %d ", distinct_values_int[i]);
+        // }
+        // printf(" distinct_values_int end\n");
         int distinct_cnt = static_cast<int>(distinct_values_int.size());
         if (na_cnt > 0) {
           ++distinct_cnt;
@@ -468,27 +476,51 @@ namespace LightGBM {
         categorical_2_bin_[-1] = 0;
         cnt_in_bin.push_back(0);
         num_bin_ = 1;
-        while (cur_cat_idx < distinct_values_int.size()
-               && (used_cnt < cut_cnt || num_bin_ < max_bin)) {
-          if (counts_int[cur_cat_idx] < min_data_in_bin && cur_cat_idx > 1) {
-            break;
+        // printf("\n stats: cut_cnt=%d\n", cut_cnt);
+
+        printf("Embedding feature CNT=%d\n", categorical_feature_vecs_count);
+        if (categorical_feature_vecs_count > 0) {
+          printf("Embedding feature\n");
+          for (int i = 0; i < categorical_feature_vecs_count; ++i) {
+              bin_2_categorical_.push_back(i);
+              categorical_2_bin_[i] = static_cast<unsigned int>(num_bin_);
+              cnt_in_bin.push_back(counts_int[cur_cat_idx]);
+              ++num_bin_;
           }
-          bin_2_categorical_.push_back(distinct_values_int[cur_cat_idx]);
-          categorical_2_bin_[distinct_values_int[cur_cat_idx]] = static_cast<unsigned int>(num_bin_);
-          used_cnt += counts_int[cur_cat_idx];
-          cnt_in_bin.push_back(counts_int[cur_cat_idx]);
-          ++num_bin_;
-          ++cur_cat_idx;
-        }
-        // Use MissingType::None to represent this bin contains all categoricals
-        if (cur_cat_idx == distinct_values_int.size() && na_cnt == 0) {
+          used_cnt = total_sample_cnt;
+
           missing_type_ = MissingType::None;
         } else {
-          missing_type_ = MissingType::NaN;
+          while (cur_cat_idx < distinct_values_int.size()
+               && (used_cnt < cut_cnt || num_bin_ < max_bin)) {
+            if (counts_int[cur_cat_idx] < min_data_in_bin && cur_cat_idx > 1) {
+              break;
+            }
+            bin_2_categorical_.push_back(distinct_values_int[cur_cat_idx]);
+            categorical_2_bin_[distinct_values_int[cur_cat_idx]] = static_cast<unsigned int>(num_bin_);
+            used_cnt += counts_int[cur_cat_idx];
+            cnt_in_bin.push_back(counts_int[cur_cat_idx]);
+            ++num_bin_;
+            ++cur_cat_idx;
+            // printf("\n stats: used_cnt=%d\n", used_cnt);
+          }
+
+          // Use MissingType::None to represent this bin contains all categoricals
+          if (cur_cat_idx == distinct_values_int.size() && na_cnt == 0) {
+            missing_type_ = MissingType::None;
+          } else {
+            missing_type_ = MissingType::NaN;
+          }
         }
         // fix count of NaN bin
         cnt_in_bin[0] = static_cast<int>(total_sample_cnt - used_cnt);
       }
+
+      // printf("bin_2_categorical_");
+      // for (int i = 0; i < bin_2_categorical_.size(); i++) {
+      //     printf(" %d ", bin_2_categorical_[i]);
+      // }
+      // printf(" bin_2_categorical_ end\n");
     }
 
     // check trivial(num_bin_ == 1) feature

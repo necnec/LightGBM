@@ -99,6 +99,13 @@ struct Config {
     return categorical_feature_vecs[0].size();
   }
 
+  int GetCategoricalFeatureVecsCount(int feature_idx) const {
+    if (!IsEmbeddedFeature(feature_idx)) {
+      return 0;
+    }
+    return categorical_feature_vecs.size();
+  }
+
   void SetCategoricalFeatureVecs(int feature_index, std::vector<std::vector<double>>&& embedded_feature_vecs) {
     categorical_feature_vecs = embedded_feature_vecs;
     embedded_categorical_feature = feature_index;
