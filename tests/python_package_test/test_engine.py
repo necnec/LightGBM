@@ -4070,7 +4070,11 @@ def test_categorical_embedding():
 
     # categories 'a' and 'aa' are close in vector space. 'a' presented well in dataset, 'aa' presented poorly
     X, y, vecs = gen_data()
-    ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs})
+    vecs = vecs[:-2]
+
+
+    ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs}, categorical_feature_labels=["a", "aa", "b", "c"])
+    # ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs})
     # ds = lgb.Dataset(X, y)
     bst = lgb.train({'objective': 'binary', 'cat_smooth': 0, 'num_leaves': 16}, ds, num_boost_round=1)
     # bst = lgb.train({}, ds)
@@ -4091,5 +4095,4 @@ def test_categorical_embedding():
     print('pred_a: {}'.format(pred_a))
     print('pred_aa: {}'.format(pred_aa))
 
-    # assert False
     np.testing.assert_allclose(pred_a, pred_aa)
