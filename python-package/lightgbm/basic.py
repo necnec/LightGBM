@@ -651,7 +651,9 @@ def _data_from_pandas(
     data,
     feature_name: Optional[_LGBM_FeatureNameConfiguration],
     categorical_feature: Optional[_LGBM_CategoricalFeatureConfiguration],
-    pandas_categorical: Optional[List[List]]
+    pandas_categorical: Optional[List[List]],
+    categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None,
+    categorical_feature_labels: Optional[np.array] = None
 ):
     if isinstance(data, pd_DataFrame):
         if len(data.shape) != 2 or data.shape[0] < 1:
@@ -669,6 +671,11 @@ def _data_from_pandas(
                 if list(data[col].cat.categories) != list(category):
                     data[col] = data[col].cat.set_categories(category)
         if len(cat_cols):  # cat_cols is list
+            if categorical_feature_labels:
+                assert categorical_feature_vecs
+                embedded_feature = list(categorical_feature_vecs.keys())[0]
+                data[embedded_feature] = data[embedded_feature].cat.set_categories(categorical_feature_labels)
+
             data = data.copy(deep=False)  # not alter origin DataFrame
             data[cat_cols] = data[cat_cols].apply(lambda x: x.cat.codes).replace({-1: np.nan})
         if categorical_feature is not None:
@@ -1464,7 +1471,7 @@ class Dataset:
         params: Optional[Dict[str, Any]] = None,
         free_raw_data: bool = True,
         categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None,
-        categorical_feature_index_vecs: Optional[Dict[int, np.array]] = None
+        categorical_feature_labels: Optional[np.array] = None
     ):
         """Initialize Dataset.
 
@@ -1524,7 +1531,8 @@ class Dataset:
         self.version = 0
         self._start_row = 0  # Used when pushing rows one by one.
         self.categorical_feature_vecs = categorical_feature_vecs
-        self.categorical_feature_index_vecs = categorical_feature_index_vecs
+        self.categorical_feature_index_vecs = None
+        self.categorical_feature_labels = categorical_feature_labels
 
     def __del__(self) -> None:
         try:
@@ -1790,7 +1798,9 @@ class Dataset:
         data, feature_name, categorical_feature, self.pandas_categorical = _data_from_pandas(data,
                                                                                              feature_name,
                                                                                              categorical_feature,
-                                                                                             self.pandas_categorical)
+                                                                                             self.pandas_categorical,
+                                                                                             self.categorical_feature_vecs,
+                                                                                             self.categorical_feature_labels)
 
         # process for args
         params = {} if params is None else params
