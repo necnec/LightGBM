@@ -4019,15 +4019,16 @@ def test_categorical_embedding():
 
     def gen_data():
         np.random.seed(0)
-        N0 = 9950
-        N1 = 50
+        # N0 = 9950
+        # N1 = 50
+        N0 = 10000
 
-        x1 = np.random.randn(N0 + N1)
-        x2 = np.random.randn(N0 + N1)
-        x3 = np.random.randn(N0 + N1)
+        x1 = np.random.randn(N0)
+        x2 = np.random.randn(N0)
+        x3 = np.random.randn(N0)
 
         K = ['a', 'b', 'c']
-        c1 = np.hstack([np.random.choice(K, N0), np.full(N1, 'aa')])
+        c1 = np.random.choice(K, N0)
 
         X = pd.DataFrame({
             'x1': x1,
@@ -4035,12 +4036,16 @@ def test_categorical_embedding():
             'x3': x3,
             'c1': c1,
         })
-        X['c1'] = X['c1'].astype('category')
+        X['c1'] = pd.Categorical(
+            X['c1'], categories=["a", "aa", "b", "c"], ordered=False
+        )
 
         def f(x):
             p = 1.
             if x['c1'] == 'a':
                 p *= 0.1
+            # if x['c1'] == 'aa':
+            #     p *= 0.05
             if x['c1'] == 'b':
                 p *= 0.5
             if x['c1'] == 'c':
@@ -4067,16 +4072,16 @@ def test_categorical_embedding():
     X, y, vecs = gen_data()
     ds = lgb.Dataset(X, y, categorical_feature_vecs={'c1': vecs})
     # ds = lgb.Dataset(X, y)
-    bst = lgb.train({'objective': 'binary', 'cat_smooth': 0}, ds, num_boost_round=2)
+    bst = lgb.train({'objective': 'binary', 'cat_smooth': 0}, ds, num_boost_round=1)
     # bst = lgb.train({}, ds)
 
     from matplotlib import pyplot as plt
     lgb.plot_tree(bst, tree_index=0, dpi=300)
     plt.savefig('../tree0.png')
-    lgb.plot_tree(bst, tree_index=1, dpi=300)
-    plt.savefig('../tree1.png')
+    # lgb.plot_tree(bst, tree_index=1, dpi=300)
+    # plt.savefig('../tree1.png')
 
-    X_a = X[X['c1'] == 'a']
+    X_a = X[X['c1'] == 'a'].copy()
     pred_a = bst.predict(X_a)
 
     X_a['c1'] = 'aa'

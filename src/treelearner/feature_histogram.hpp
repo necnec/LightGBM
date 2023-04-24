@@ -367,6 +367,7 @@ class FeatureHistogram {
 
     double min_gain_shift = gain_shift + meta_->config->min_gain_to_split;
     const int8_t offset = meta_->offset;
+    // const int bin_start = 0; //1 - offset;
     const int bin_start = 1 - offset;
     const int bin_end = meta_->num_bin - offset;
     int used_bin = -1;
@@ -569,7 +570,9 @@ class FeatureHistogram {
             continue;
           }
 
-          cnt_cur_group = 0;
+          if (!is_embedded_feature) {
+            cnt_cur_group = 0;
+          }
 
           double sum_right_gradient = sum_gradient - sum_left_gradient;
           if (USE_RAND) {
@@ -582,7 +585,7 @@ class FeatureHistogram {
                   sum_right_hessian, meta_->config->lambda_l1, l2,
                   meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
                   left_count, right_count, parent_output);
-          printf("threshold %d, gain: %f\n", i, current_gain);
+          printf("threshold %d, gain: %f, left_count: %d\n", i, current_gain, left_count);
 
           if (current_gain <= min_gain_shift) {
             printf("gain too small\n");
@@ -634,11 +637,13 @@ class FeatureHistogram {
           for (int i = 0; i < output->num_cat_threshold; ++i) {
             auto t = sorted_idx[i] + offset;
             output->cat_threshold[i] = t;
+            printf("categories took: %d\n", t);
           }
         } else {
           for (int i = 0; i < output->num_cat_threshold; ++i) {
             auto t = sorted_idx[used_bin - 1 - i] + offset;
             output->cat_threshold[i] = t;
+            printf("categories took inv: %d\n", t);
           }
         }
       }
