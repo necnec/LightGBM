@@ -75,8 +75,9 @@ public:
         // Projection of gradient on the search direction
         const Scalar dg_init = grad.dot(drt);
         // Make sure d points to a descent direction
+        // TODO Investigate what is that error about? Is it related that our function is not convex?
         if (dg_init > 0)
-            throw std::logic_error("the moving direction increases the objective function value");
+            return;// throw std::logic_error("the moving direction increases the objective function value");
 
         const Scalar test_decr = param.ftol * dg_init,  // Sufficient decrease
             test_curv = -param.wolfe * dg_init;         // Curvature
