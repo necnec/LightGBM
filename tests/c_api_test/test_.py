@@ -7,7 +7,7 @@ import numpy as np
 from scipy import sparse
 
 try:
-    from lightgbm.basic import _LIB as LIB
+    from lightgbm.basic import _LIB as LIB, _c_float_array
 except ModuleNotFoundError:
     print("Could not import lightgbm Python package, looking for lib_lightgbm at the repo root")
     if system() in ('Windows', 'Microsoft'):
@@ -180,10 +180,18 @@ def test_booster():
     train = load_from_mat(binary_example_dir / 'binary.train', None)
     test = load_from_mat(binary_example_dir / 'binary.test', train)
     booster = ctypes.c_void_p()
+    vecs = np.array([[0.0]], dtype=np.float32)
+    vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
+    ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
+    embedded_feature_index = -1
     LIB.LGBM_BoosterCreate(
         train,
         c_str("app=binary metric=auc num_leaves=31 verbose=0"),
-        # TODO (Anahit)
+        ptr_vecs,
+        ctypes.c_int(type_ptr_vecs),
+        ctypes.c_int32(vecs.shape[0]),
+        ctypes.c_int32(vecs.shape[1]),
+        ctypes.c_int32(embedded_feature_index),
         ctypes.byref(booster))
     LIB.LGBM_BoosterAddValidData(booster, test)
     is_finished = ctypes.c_int(0)

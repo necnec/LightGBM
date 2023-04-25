@@ -343,8 +343,6 @@ class FeatureHistogram {
                                          const FeatureConstraint* constraints,
                                          double parent_output,
                                          SplitInfo* output) {
-
-
     is_splittable_ = false;
     output->default_left = false;
     double best_gain = kMinScore;
@@ -368,7 +366,6 @@ class FeatureHistogram {
 
     double min_gain_shift = gain_shift + meta_->config->min_gain_to_split;
     const int8_t offset = meta_->offset;
-    // const int bin_start = 0; //1 - offset;
     const int bin_start = 1 - offset;
     const int bin_end = meta_->num_bin - offset;
     int used_bin = -1;
@@ -442,16 +439,16 @@ class FeatureHistogram {
         }
       }
     } else {
-      for (int i = bin_start; i < bin_end; ++i) {
-        if ((Common::RoundInt(GET_HESS(data_, i) * cnt_factor) >=
-            meta_->config->cat_smooth) || is_embedded_feature) {
-          sorted_idx.push_back(i);
-        }
-      }
-      used_bin = static_cast<int>(sorted_idx.size());
 
-      l2 += meta_->config->cat_l2;
       if (is_embedded_feature) {
+        std::vector<int> present_idx;
+        for (int i = bin_start; i < bin_end; ++i) {
+          sorted_idx.push_back(i);
+          if (GET_GRAD(data_, i) != 0) {
+            present_idx.push_back(i);
+          }
+        }
+
         LBFGSpp::LBFGSParam<double> param;
         param.epsilon = 1e-6;
         param.max_iterations = 100;
@@ -461,22 +458,22 @@ class FeatureHistogram {
         // dim + intercept term
         auto dim = meta_->config->GetCategoricalFeatureVecsDim() + 1;
         auto w = GetInitialW(dim);
-        Eigen::VectorXd g(sorted_idx.size());
-        Eigen::VectorXd h(sorted_idx.size());
-        Eigen::MatrixXd x = Eigen::MatrixXd::Zero(sorted_idx.size(), dim);
+        Eigen::VectorXd g(present_idx.size());
+        Eigen::VectorXd h(present_idx.size());
+        Eigen::MatrixXd x = Eigen::MatrixXd::Zero(present_idx.size(), dim);
 
-        for (size_t i = 0; i < sorted_idx.size(); ++i) {
-          auto x_vec = meta_->config->GetCategoricalFeatureVec(feature_index_, bin_2_categorical_[sorted_idx[i]]);
+        for (size_t i = 0; i < present_idx.size(); ++i) {
+          auto x_vec = meta_->config->GetCategoricalFeatureVec(feature_index_, bin_2_categorical_[present_idx[i]]);
           for (size_t j = 0; j < x_vec->size(); ++j) {
             x(i, j) = (*x_vec)[j];
           }
           // intercept
           x(i, dim - 1) = 1;
 
-          g[i] = GET_GRAD(data_, sorted_idx[i]);
-          h[i] = GET_HESS(data_, sorted_idx[i]);
+          g[i] = GET_GRAD(data_, present_idx[i]);
+          h[i] = GET_HESS(data_, present_idx[i]);
 
-          // if (sorted_idx[i] == 16258+1) {
+          // if (present_idx[i] == 16258+1) {
           //   printf("MY grad:%f, h:%f\n", g[i], h[i]);
           // } else if (i % 100 == 0) {
           //   printf("grad:%f, h:%f\n", g[i], h[i]);
@@ -490,13 +487,23 @@ class FeatureHistogram {
         solver.minimize(fun, w, grad);
         // printf("END OPTIMIZING\n\n\n\n\n\n\n\n\n\n\n");
 
-        Eigen::VectorXd split = x * w;
+        Eigen::MatrixXd x_all = Eigen::MatrixXd::Zero(sorted_idx.size(), dim);
 
-        std::vector<int> indices(split.size());
+        for (size_t i = 0; i < sorted_idx.size(); ++i) {
+          auto x_vec = meta_->config->GetCategoricalFeatureVec(feature_index_, bin_2_categorical_[sorted_idx[i]]);
+          for (size_t j = 0; j < x_vec->size(); ++j) {
+            x_all(i, j) = (*x_vec)[j];
+          }
+          x_all(i, dim - 1) = 1;
+        }
+
+        Eigen::VectorXd scores = x_all * w;
+
+        std::vector<int> indices(scores.size());
         iota(indices.begin(), indices.end(), 0);
         std::sort(indices.begin(), indices.end(),
-                  [&split](int left, int right) -> bool {
-          return split[left] < split[right];
+                  [&scores](int left, int right) -> bool {
+          return scores[left] < scores[right];
         });
 
         std::vector<int> sorted(sorted_idx.size());
@@ -506,8 +513,8 @@ class FeatureHistogram {
 
         sorted_idx = sorted;
 
-        // printf("split\n");
-        // for (auto e: split) {
+        // printf("scores\n");
+        // for (auto e: scores) {
         //   printf("%f ", e);
         // }
         // printf("\n");
@@ -519,6 +526,12 @@ class FeatureHistogram {
         // printf("\n");
 
       } else {
+        for (int i = bin_start; i < bin_end; ++i) {
+          if (Common::RoundInt(GET_HESS(data_, i) * cnt_factor) >=
+              meta_->config->cat_smooth) {
+            sorted_idx.push_back(i);
+          }
+        }
         auto ctr_fun = [this](double sum_grad, double sum_hess) {
             return (sum_grad) / (sum_hess + meta_->config->cat_smooth);
         };
@@ -532,6 +545,9 @@ class FeatureHistogram {
       // printf("sorted_idx %d %d %d %d %d ...  %d %d %d %d %d (%d)\n", sorted_idx[0], sorted_idx[1], sorted_idx[2], sorted_idx[3], sorted_idx[4],
       //   sorted_idx[sorted_idx.size()-5],sorted_idx[sorted_idx.size()-4],sorted_idx[sorted_idx.size()-3],sorted_idx[sorted_idx.size()-2],sorted_idx[sorted_idx.size() -1],
       //   sorted_idx.size());
+
+      used_bin = static_cast<int>(sorted_idx.size());
+      l2 += meta_->config->cat_l2;
 
       std::vector<int> find_direction(1, 1);
       std::vector<int> start_position(1, 0);

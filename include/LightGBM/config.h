@@ -109,30 +109,21 @@ struct Config {
     SetEmbeddedFeature(feature_index);
   }
 
-  // TODO (Anahit) remove
-  const std::vector<std::vector<double>>* GetCategoricalFeatureVecs(int feature_index) const {
+  const std::vector<double>* GetCategoricalFeatureVec(int feature_index, int cat) const {
     if (feature_index != embedded_categorical_feature) {
       return nullptr;
     }
 
-    return &categorical_feature_vecs;
+    return &categorical_feature_vecs[cat];
   }
 
-    const std::vector<double>* GetCategoricalFeatureVec(int feature_index, int cat) const {
-      if (feature_index != embedded_categorical_feature) {
-        return nullptr;
-      }
-
-      return &categorical_feature_vecs[cat];
+  void SetEmbeddedFeatureCatCount(int cat_count) {
+    embedded_categorical_feature_cat_count = cat_count;
   }
 
-    void SetEmbeddedFeatureCatCount(int cat_count) {
-      embedded_categorical_feature_cat_count = cat_count;
-    }
-
-    int GetEmbeddedFeatureCatCount() const {
-      return embedded_categorical_feature_cat_count;
-    }
+  int GetEmbeddedFeatureCatCount() const {
+    return embedded_categorical_feature_cat_count;
+  }
 
 #ifndef __NVCC__
   #pragma region Parameters
