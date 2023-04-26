@@ -1388,9 +1388,8 @@ class HistogramPool {
       OMP_LOOP_EX_BEGIN();
       pool_[i].reset(new FeatureHistogram[train_data->num_features()]);
       for (int feature_index = 0; feature_index < train_data->num_features(); ++feature_index) {
-        auto inner_feature_idx = train_data->InnerFeatureIndex(feature_index);
-        pool_[i][inner_feature_idx].SetFeatureIndex(feature_index);
-        pool_[i][inner_feature_idx].SetBin2Categorical(train_data->FeatureBinMapper(inner_feature_idx)->GetBin2Categorical());
+        pool_[i][feature_index].SetFeatureIndex(train_data->RealFeatureIndex(feature_index));
+        pool_[i][feature_index].SetBin2Categorical(train_data->FeatureBinMapper(feature_index)->GetBin2Categorical());
       }
       data_[i].resize(num_total_bin * 2);
       for (int j = 0; j < train_data->num_features(); ++j) {
