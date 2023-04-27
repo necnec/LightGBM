@@ -662,6 +662,11 @@ def _data_from_pandas(
             data = data.rename(columns=str, copy=False)
         cat_cols = [col for col, dtype in zip(data.columns, data.dtypes) if isinstance(dtype, pd_CategoricalDtype)]
         cat_cols_not_ordered = [col for col in cat_cols if not data[col].cat.ordered]
+        if len(cat_cols):  # cat_cols is list
+            if categorical_feature_labels:
+                assert categorical_feature_vecs
+                embedded_feature = list(categorical_feature_vecs.keys())[0]
+                data[embedded_feature] = data[embedded_feature].cat.set_categories(categorical_feature_labels)
         if pandas_categorical is None:  # train dataset
             pandas_categorical = [list(data[col].cat.categories) for col in cat_cols]
         else:
@@ -671,11 +676,6 @@ def _data_from_pandas(
                 if list(data[col].cat.categories) != list(category):
                     data[col] = data[col].cat.set_categories(category)
         if len(cat_cols):  # cat_cols is list
-            if categorical_feature_labels:
-                assert categorical_feature_vecs
-                embedded_feature = list(categorical_feature_vecs.keys())[0]
-                data[embedded_feature] = data[embedded_feature].cat.set_categories(categorical_feature_labels)
-
             data = data.copy(deep=False)  # not alter origin DataFrame
             data[cat_cols] = data[cat_cols].apply(lambda x: x.cat.codes).replace({-1: np.nan})
         if categorical_feature is not None:
