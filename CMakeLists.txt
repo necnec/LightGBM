@@ -108,6 +108,9 @@ endif()
 set(EIGEN_DIR "${PROJECT_SOURCE_DIR}/external_libs/eigen")
 include_directories(${EIGEN_DIR})
 
+set(STLBFGS_DIR "${PROJECT_SOURCE_DIR}/external_libs/LBFGSpp")
+include_directories(${STLBFGS_DIR})
+
 # See https://gitlab.com/libeigen/eigen/-/blob/master/COPYING.README
 add_definitions(-DEIGEN_MPL2_ONLY)
 add_definitions(-DEIGEN_DONT_PARALLELIZE)
@@ -627,3 +630,8 @@ install(
 )
 
 install(DIRECTORY ${LightGBM_HEADER_DIR}/LightGBM DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
+
+#add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external_libs/stlbfgs)
+
+#set(LBFGSPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external_libs/LBFGSpp/include)
+#set(LBFGSPP_LIBRARY lbfgspp)

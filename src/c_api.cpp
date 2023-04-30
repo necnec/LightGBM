@@ -31,6 +31,11 @@
 #include <LightGBM/utils/yamc/alternate_shared_mutex.hpp>
 #include <LightGBM/utils/yamc/yamc_shared_lock.hpp>
 
+
+std::vector<std::vector<double>>
+EmbeddedFeatureVectors(const void* vecs, int num_feature_values, int dim, int vecs_type, int is_row_major);
+
+
 namespace LightGBM {
 
 inline int LGBM_APIHandleException(const std::exception& ex) {
@@ -111,9 +116,19 @@ class Booster {
   }
 
   Booster(const Dataset* train_data,
-          const char* parameters) {
+          const char* parameters,
+          const void* embedded_feature_vecs,
+          int vecs_type,
+          int32_t num_feature_values,
+          int32_t dim,
+          int32_t embedded_feature_index) {
     auto param = Config::Str2Map(parameters);
     config_.Set(param);
+
+    auto embedded_feature_vectors = EmbeddedFeatureVectors(embedded_feature_vecs, num_feature_values, dim, vecs_type, 1 /* for row_major */);
+    printf("Booster constructor - embedded_feature_index: %d\n", embedded_feature_index);
+    config_.SetCategoricalFeatureVecs(embedded_feature_index, move(embedded_feature_vectors));
+
     OMP_SET_NUM_THREADS(config_.num_threads);
     // create boosting
     if (config_.input_model.size() > 0) {
@@ -1239,6 +1254,8 @@ int LGBM_DatasetCreateFromMat(const void* data,
                               int is_row_major,
                               const char* parameters,
                               const DatasetHandle reference,
+                              int32_t embedded_feature_index,
+                              int32_t embedded_feature_cat_count,
                               DatasetHandle* out) {
   return LGBM_DatasetCreateFromMats(1,
                                     &data,
@@ -1248,6 +1265,8 @@ int LGBM_DatasetCreateFromMat(const void* data,
                                     is_row_major,
                                     parameters,
                                     reference,
+                                    embedded_feature_index,
+                                    embedded_feature_cat_count,
                                     out);
 }
 
@@ -1259,11 +1278,15 @@ int LGBM_DatasetCreateFromMats(int32_t nmat,
                                int is_row_major,
                                const char* parameters,
                                const DatasetHandle reference,
+                               int32_t embedded_feature_index,
+                               int32_t embedded_feature_cat_count,
                                DatasetHandle* out) {
   API_BEGIN();
   auto param = Config::Str2Map(parameters);
   Config config;
   config.Set(param);
+  config.SetEmbeddedFeature(embedded_feature_index);
+  config.SetEmbeddedFeatureCatCount(embedded_feature_cat_count);
   OMP_SET_NUM_THREADS(config.num_threads);
   std::unique_ptr<Dataset> ret;
   int32_t total_nrow = 0;
@@ -1767,10 +1790,15 @@ int LGBM_DatasetAddFeaturesFrom(DatasetHandle target,
 
 int LGBM_BoosterCreate(const DatasetHandle train_data,
                        const char* parameters,
+                       const void* embedded_feature_vecs,
+                       int vecs_type,
+                       int32_t num_feature_values,
+                       int32_t dim,
+                       int32_t embedded_feature_index,
                        BoosterHandle* out) {
   API_BEGIN();
   const Dataset* p_train_data = reinterpret_cast<const Dataset*>(train_data);
-  auto ret = std::unique_ptr<Booster>(new Booster(p_train_data, parameters));
+  auto ret = std::unique_ptr<Booster>(new Booster(p_train_data, parameters, embedded_feature_vecs, vecs_type, num_feature_values, dim, embedded_feature_index));
   *out = ret.release();
   API_END();
 }
@@ -2591,6 +2619,44 @@ int LGBM_NetworkInitWithFunctions(int num_machines, int rank,
 
 // ---- start of some help functions
 
+
+template<typename T>
+std::vector<std::vector<double>>
+EmbeddedFeatureVectors_helper(const void* vecs, int num_feature_values, int dim, int is_row_major) {
+  const T* vecs_ptr = reinterpret_cast<const T*>(vecs);
+  std::vector<std::vector<double>> ret(num_feature_values);
+  if (is_row_major) {
+    for (int idx = 0; idx < (int) ret.size(); ++idx) {
+      ret[idx].resize(dim);
+      auto tmp_ptr = vecs_ptr + static_cast<size_t>(dim) * idx;
+      for (int j = 0; j < dim; ++j) {
+        ret[idx][j] = static_cast<double>(*(tmp_ptr + j));
+      }
+    }
+  } else {
+    for (int idx = 0; idx < (int) ret.size(); ++idx) {
+      ret[idx].resize(dim);
+      for (int j = 0; j < dim; ++j) {
+        ret[idx][j] = static_cast<double>(*(vecs_ptr + static_cast<size_t>(num_feature_values) * j + idx));
+      }
+    }
+  }
+  return ret;
+}
+
+
+
+
+std::vector<std::vector<double>>
+EmbeddedFeatureVectors(const void* vecs, int num_feature_values, int dim, int vecs_type, int is_row_major) {
+  if (vecs_type == C_API_DTYPE_FLOAT32) {
+    return EmbeddedFeatureVectors_helper<float>(vecs, num_feature_values, dim, is_row_major);
+  } else if (vecs_type == C_API_DTYPE_FLOAT64){
+    return EmbeddedFeatureVectors_helper<double>(vecs, num_feature_values, dim, is_row_major);
+  }
+  Log::Fatal("Unknown data type in EmbeddedFeatureVectors");
+  return std::vector<std::vector<double>>();
+}
 
 template<typename T>
 std::function<std::vector<double>(int row_idx)>

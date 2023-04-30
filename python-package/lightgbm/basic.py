@@ -651,7 +651,9 @@ def _data_from_pandas(
     data,
     feature_name: Optional[_LGBM_FeatureNameConfiguration],
     categorical_feature: Optional[_LGBM_CategoricalFeatureConfiguration],
-    pandas_categorical: Optional[List[List]]
+    pandas_categorical: Optional[List[List]],
+    categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None,
+    categorical_feature_labels: Optional[np.array] = None
 ):
     if isinstance(data, pd_DataFrame):
         if len(data.shape) != 2 or data.shape[0] < 1:
@@ -660,6 +662,11 @@ def _data_from_pandas(
             data = data.rename(columns=str, copy=False)
         cat_cols = [col for col, dtype in zip(data.columns, data.dtypes) if isinstance(dtype, pd_CategoricalDtype)]
         cat_cols_not_ordered = [col for col in cat_cols if not data[col].cat.ordered]
+        if len(cat_cols):  # cat_cols is list
+            if categorical_feature_labels:
+                assert categorical_feature_vecs
+                embedded_feature = list(categorical_feature_vecs.keys())[0]
+                data[embedded_feature] = data[embedded_feature].cat.set_categories(categorical_feature_labels)
         if pandas_categorical is None:  # train dataset
             pandas_categorical = [list(data[col].cat.categories) for col in cat_cols]
         else:
@@ -1462,7 +1469,9 @@ class Dataset:
         feature_name: _LGBM_FeatureNameConfiguration = 'auto',
         categorical_feature: _LGBM_CategoricalFeatureConfiguration = 'auto',
         params: Optional[Dict[str, Any]] = None,
-        free_raw_data: bool = True
+        free_raw_data: bool = True,
+        categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None,
+        categorical_feature_labels: Optional[np.array] = None
     ):
         """Initialize Dataset.
 
@@ -1521,6 +1530,9 @@ class Dataset:
         self._params_back_up = None
         self.version = 0
         self._start_row = 0  # Used when pushing rows one by one.
+        self.categorical_feature_vecs = categorical_feature_vecs
+        self.categorical_feature_index_vecs = None
+        self.categorical_feature_labels = categorical_feature_labels
 
     def __del__(self) -> None:
         try:
@@ -1770,7 +1782,8 @@ class Dataset:
         predictor=None,
         feature_name='auto',
         categorical_feature='auto',
-        params: Optional[Dict[str, Any]] = None
+        params: Optional[Dict[str, Any]] = None,
+        categorical_feature_vecs: Optional[Dict[str, List[np.ndarray]]] = None
     ) -> "Dataset":
         if data is None:
             self.handle = None
@@ -1778,10 +1791,16 @@ class Dataset:
         if reference is not None:
             self.pandas_categorical = reference.pandas_categorical
             categorical_feature = reference.categorical_feature
+
+        if categorical_feature_vecs:
+            self.categorical_feature_index_vecs = {data.columns.get_loc(k): v for k, v in categorical_feature_vecs.items()}
+
         data, feature_name, categorical_feature, self.pandas_categorical = _data_from_pandas(data,
                                                                                              feature_name,
                                                                                              categorical_feature,
-                                                                                             self.pandas_categorical)
+                                                                                             self.pandas_categorical,
+                                                                                             self.categorical_feature_vecs,
+                                                                                             self.categorical_feature_labels)
 
         # process for args
         params = {} if params is None else params
@@ -1967,8 +1986,12 @@ class Dataset:
             data = np.array(mat.reshape(mat.size), dtype=mat.dtype, copy=False)
         else:  # change non-float data to float data, need to copy
             data = np.array(mat.reshape(mat.size), dtype=np.float32)
-
         ptr_data, type_ptr_data, _ = _c_float_array(data)
+
+        embedded_feature_cat_count = len(list(self.categorical_feature_index_vecs.values())[0])\
+            if self.categorical_feature_index_vecs else 0
+        embedded_feature_index = list(self.categorical_feature_index_vecs.keys())[0] \
+            if self.categorical_feature_index_vecs else -1
         _safe_call(_LIB.LGBM_DatasetCreateFromMat(
             ptr_data,
             ctypes.c_int(type_ptr_data),
@@ -1977,6 +2000,8 @@ class Dataset:
             ctypes.c_int(_C_API_IS_ROW_MAJOR),
             _c_str(params_str),
             ref_dataset,
+            ctypes.c_int32(embedded_feature_index),
+            ctypes.c_int32(embedded_feature_cat_count),
             ctypes.byref(self.handle)))
         return self
 
@@ -2157,7 +2182,7 @@ class Dataset:
                     self._lazy_init(self.data, label=self.label, reference=self.reference,
                                     weight=self.weight, group=self.group,
                                     init_score=self.init_score, predictor=self._predictor,
-                                    feature_name=self.feature_name, params=self.params)
+                                    feature_name=self.feature_name, params=self.params, categorical_feature_vecs=self.categorical_feature_vecs)
                 else:
                     # construct subset
                     used_indices = _list_to_1d_numpy(self.used_indices, np.int32, name='used_indices')
@@ -2192,7 +2217,7 @@ class Dataset:
                 self._lazy_init(self.data, label=self.label,
                                 weight=self.weight, group=self.group,
                                 init_score=self.init_score, predictor=self._predictor,
-                                feature_name=self.feature_name, categorical_feature=self.categorical_feature, params=self.params)
+                                feature_name=self.feature_name, categorical_feature=self.categorical_feature, params=self.params, categorical_feature_vecs=self.categorical_feature_vecs)
             if self.free_raw_data:
                 self.data = None
             self.feature_name = self.get_feature_name()
@@ -3010,7 +3035,8 @@ class Booster:
         params: Optional[Dict[str, Any]] = None,
         train_set: Optional[Dataset] = None,
         model_file: Optional[Union[str, Path]] = None,
-        model_str: Optional[str] = None
+        model_str: Optional[str] = None,
+        categorical_feature_vecs: Optional[Dict[str, np.array]] = None
     ):
         """Initialize the Booster.
 
@@ -3077,10 +3103,34 @@ class Booster:
             params.update(train_set.get_params())
             params_str = _param_dict_to_str(params)
             self.handle = ctypes.c_void_p()
+
+            vecs = np.array([[0.0]], dtype=np.float32)
+            vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
+            ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
+            embedded_feature_index = -1
+
+            if train_set.categorical_feature_index_vecs is not None:
+                # one feature supported for now
+                assert len(train_set.categorical_feature_index_vecs) == 1
+                vecs = list(train_set.categorical_feature_index_vecs.values())[0]
+                embedded_feature_index = list(train_set.categorical_feature_index_vecs.keys())[0]
+                vecs_data = np.array(vecs.reshape(vecs.size), dtype=vecs.dtype, copy=False)
+                ptr_vecs, type_ptr_vecs, _ = _c_float_array(vecs_data)
+
+                print('vecs: {}'.format(vecs))
+                print('vecs.shape[0] {}'.format(vecs.shape[0]))
+                print('vecs.shape[1] {}'.format(vecs.shape[1]))
+
             _safe_call(_LIB.LGBM_BoosterCreate(
                 train_set.handle,
                 _c_str(params_str),
-                ctypes.byref(self.handle)))
+                ptr_vecs,
+                ctypes.c_int(type_ptr_vecs),
+                ctypes.c_int32(vecs.shape[0]),
+                ctypes.c_int32(vecs.shape[1]),
+                ctypes.c_int32(embedded_feature_index),
+                ctypes.byref(self.handle),
+            ))
             # save reference to data
             self.train_set = train_set
             self.valid_sets: List[Dataset] = []
