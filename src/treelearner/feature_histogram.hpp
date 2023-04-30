@@ -32,7 +32,7 @@ namespace {
       std::normal_distribution<double> distribution(0.0,1.0);
 
       for (int i = 0; i < size; ++i) {
-        w[i] = distribution(generator);
+        w[i] = distribution(generator) / sqrt(size);
       }
       return w;
     }
@@ -63,7 +63,7 @@ namespace {
           auto hs = h_.dot(s);
           auto ones = Eigen::VectorXd::Ones(s.size());
 //          loss = -(gs**2 / (1 + hs) + (GRAD-gs)**2 / (1 + HESS - hs))
-          auto loss = -(pow(gs, 2) / (1 + hs) + pow(GRAD - gs, 2) / (1 + HESS - hs)) + lambda2_cat_ * w.squaredNorm();
+          auto loss = -(pow(gs, 2) / (1 + hs) + pow(GRAD - gs, 2) / (1 + HESS - hs)) + lambda2_cat_ * w(Eigen::seq(0,Eigen::last-1)).squaredNorm();
 
 //          grad = - ((
 //                            gs * (2*(1 + hs)*g - gs*h) / (1 + hs)**2
@@ -73,7 +73,9 @@ namespace {
                   (gs * (2 * (1 + hs) * g_ - gs * h_) / pow(1 + hs, 2)
                    - (GRAD - gs) * (2 * (1 + HESS - hs) * g_ - (GRAD - gs) * h_) / pow(1 + HESS - hs, 2))
                    );
-          grad = R.cwiseProduct(s).cwiseProduct(ones - s).transpose() * x_ + lambda2_cat_ * 2. * w.transpose();
+          grad = R.cwiseProduct(s).cwiseProduct(ones - s).transpose() * x_;
+          // we don't regularize intercept term
+          grad(Eigen::seq(0,Eigen::last-1)) += lambda2_cat_ * 2. * w(Eigen::seq(0,Eigen::last-1)).transpose();
           // printf("LOSS: %f GRAD: %f\n", loss, grad.norm());
           return loss;
         }
@@ -439,6 +441,7 @@ class FeatureHistogram {
         }
       }
     } else {
+      auto max_cat_threshold = meta_->config->max_cat_threshold;
 
       if (is_embedded_feature) {
         std::vector<int> present_idx;
@@ -451,8 +454,8 @@ class FeatureHistogram {
 
         LBFGSpp::LBFGSParam<double> param;
         param.epsilon = 1e-6;
-        param.max_iterations = 100;
-        auto lambda2_cat = 0.1;
+        param.max_iterations = 300;
+        auto lambda2_cat = 1.;
 
         LBFGSpp::LBFGSSolver<double> solver(param);
         // dim + intercept term
@@ -471,21 +474,19 @@ class FeatureHistogram {
           x(i, dim - 1) = 1;
 
           g[i] = GET_GRAD(data_, present_idx[i]);
-          h[i] = GET_HESS(data_, present_idx[i]);
-
-          // if (present_idx[i] == 16258+1) {
-          //   printf("MY grad:%f, h:%f\n", g[i], h[i]);
-          // } else if (i % 100 == 0) {
-          //   printf("grad:%f, h:%f\n", g[i], h[i]);
-          // }
+          h[i] = GET_HESS(data_, present_idx[i]) / l2;
         }
 
         Loss fun(x, g, h, lambda2_cat);
         double grad;
 
-        // printf("OPTIMIZING\n");
         solver.minimize(fun, w, grad);
-        // printf("END OPTIMIZING\n\n\n\n\n\n\n\n\n\n\n");
+
+        printf("|w|=%f last:%f\n", w(Eigen::seq(0,Eigen::last-1)).norm(), w(Eigen::last));
+        if (w(Eigen::seq(0,Eigen::last-1)).norm() < 1e-2) {
+          is_splittable_ = true;
+          return;
+        }
 
         Eigen::MatrixXd x_all = Eigen::MatrixXd::Zero(sorted_idx.size(), dim);
 
@@ -513,18 +514,24 @@ class FeatureHistogram {
 
         sorted_idx = sorted;
 
-        // printf("scores\n");
-        // for (auto e: scores) {
-        //   printf("%f ", e);
-        // }
-        // printf("\n");
+        // printf("sorted_idx %d %d %d %d %d ...  %d %d %d %d %d (%d)\n", sorted_idx[0], sorted_idx[1], sorted_idx[2], sorted_idx[3], sorted_idx[4],
+        //   sorted_idx[sorted_idx.size()-5],sorted_idx[sorted_idx.size()-4],sorted_idx[sorted_idx.size()-3],sorted_idx[sorted_idx.size()-2],sorted_idx[sorted_idx.size() -1],
+        //   sorted_idx.size());
+        // printf("scores %f %f %f %f %f ...  %f %f %f %f %f (%d)\n",
+        //   scores[indices[0]],
+        //   scores[indices[1]],
+        //   scores[indices[2]],
+        //   scores[indices[3]],
+        //   scores[indices[4]],
+        //   scores[indices[sorted_idx.size()-5]],
+        //   scores[indices[sorted_idx.size()-4]],
+        //   scores[indices[sorted_idx.size()-3]],
+        //   scores[indices[sorted_idx.size()-2]],
+        //   scores[indices[sorted_idx.size() -1]],
+        //   sorted_idx.size());
 
-        // printf("sorted_idx\n");
-        // for (auto e: sorted_idx) {
-        //   printf("%d ", e);
-        // }
-        // printf("\n");
-
+        // effective size of max-cat-threhold due to unseen categories
+        max_cat_threshold = int(max_cat_threshold * sorted_idx.size() / present_idx.size());
       } else {
         for (int i = bin_start; i < bin_end; ++i) {
           if (Common::RoundInt(GET_HESS(data_, i) * cnt_factor) >=
@@ -542,10 +549,6 @@ class FeatureHistogram {
                 });
       }
 
-      // printf("sorted_idx %d %d %d %d %d ...  %d %d %d %d %d (%d)\n", sorted_idx[0], sorted_idx[1], sorted_idx[2], sorted_idx[3], sorted_idx[4],
-      //   sorted_idx[sorted_idx.size()-5],sorted_idx[sorted_idx.size()-4],sorted_idx[sorted_idx.size()-3],sorted_idx[sorted_idx.size()-2],sorted_idx[sorted_idx.size() -1],
-      //   sorted_idx.size());
-
       used_bin = static_cast<int>(sorted_idx.size());
       l2 += meta_->config->cat_l2;
 
@@ -554,7 +557,7 @@ class FeatureHistogram {
       find_direction.push_back(-1);
       start_position.push_back(used_bin - 1);
       const int max_num_cat =
-          std::min(meta_->config->max_cat_threshold, (used_bin + 1) / 2);
+          std::min(max_cat_threshold, (used_bin + 1) / 2);
       int max_threshold = std::max(std::min(max_num_cat, used_bin) - 1, 0);
       if (USE_RAND) {
         if (max_threshold > 0) {
@@ -584,35 +587,36 @@ class FeatureHistogram {
           left_count += cnt;
           cnt_cur_group += cnt;
 
-          if (left_count < meta_->config->min_data_in_leaf ||
-              sum_left_hessian < meta_->config->min_sum_hessian_in_leaf) {
-            // printf("Left leaf is small. Moving forward\n");
-            continue;
-          }
-          data_size_t right_count = num_data - left_count;
-          if (right_count < meta_->config->min_data_in_leaf ||
-              right_count < min_data_per_group) {
-            // printf("Right leaf is small. Moving forward\n");
-            break;
-          }
-
           double sum_right_hessian = sum_hessian - sum_left_hessian;
-          if (sum_right_hessian < meta_->config->min_sum_hessian_in_leaf) {
-            break;
-          }
-
-          if (cnt_cur_group < min_data_per_group) {
-            continue;
-          }
-
-          if (!is_embedded_feature) {
-            cnt_cur_group = 0;
-          }
-
           double sum_right_gradient = sum_gradient - sum_left_gradient;
-          if (USE_RAND) {
-            if (i != rand_threshold) {
+          data_size_t right_count = num_data - left_count;
+          if (!is_embedded_feature) {
+
+            if (left_count < meta_->config->min_data_in_leaf ||
+                sum_left_hessian < meta_->config->min_sum_hessian_in_leaf) {
+              // printf("Left leaf is small. Moving forward\n");
               continue;
+            }
+            if (right_count < meta_->config->min_data_in_leaf ||
+                right_count < min_data_per_group) {
+              // printf("Right leaf is small. Moving forward\n");
+              break;
+            }
+
+            if (sum_right_hessian < meta_->config->min_sum_hessian_in_leaf) {
+              // printf("sum_right_hessian");
+              break;
+            }
+
+            if (cnt_cur_group < min_data_per_group) {
+              continue;
+            }
+            cnt_cur_group = 0;
+
+            if (USE_RAND) {
+              if (i != rand_threshold) {
+                continue;
+              }
             }
           }
           double current_gain = GetSplitGains<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
@@ -620,14 +624,16 @@ class FeatureHistogram {
                   sum_right_hessian, meta_->config->lambda_l1, l2,
                   meta_->config->max_delta_step, constraints, 0, meta_->config->path_smooth,
                   left_count, right_count, parent_output);
-          // printf("threshold %d, gain: %f, left_count: %d\n", i, current_gain, left_count);
+          if (is_embedded_feature) {
+            // printf("threshold %d, gain: %f, left_count: %d direction: %d\n", i, current_gain, left_count, out_i);
+          }
 
           if (current_gain <= min_gain_shift) {
             // printf("gain too small\n");
             continue;
           }
           is_splittable_ = true;
-          if (current_gain >= best_gain) {
+          if (current_gain > best_gain) {
             best_left_count = left_count;
             best_sum_left_gradient = sum_left_gradient;
             best_sum_left_hessian = sum_left_hessian;
@@ -639,8 +645,6 @@ class FeatureHistogram {
         }
       }
     }
-    // printf("best_threshold: %d gain: %f\n", best_threshold, best_gain);
-    // printf("best_dir: %d\n", best_dir);
 
     if (is_splittable_) {
       output->left_output = CalculateSplittedLeafOutput<USE_MC, USE_L1, USE_MAX_OUTPUT, USE_SMOOTHING>(
